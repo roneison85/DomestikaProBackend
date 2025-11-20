@@ -52,34 +52,52 @@ public class RegistroPontoService {
                 req.getFuncionarioId(), inicioDoDia(), fimDoDia()
         );
 
-        // regras simples de fluxo
-        switch (req.getTipo()) {
-            case "ENTRADA":
-                boolean temEntrada = hoje.stream().anyMatch(p -> p.getTipo().equals("ENTRADA"));
-                if (temEntrada) throw new RuntimeException("Entrada já registrada hoje.");
-                break;
+        boolean temEntrada = hoje.stream().anyMatch(p -> p.getTipo().equals("ENTRADA"));
+        boolean temSaida = hoje.stream().anyMatch(p -> p.getTipo().equals("SAIDA"));
 
-            case "PAUSA":
-                boolean temPausa = hoje.stream().anyMatch(p -> p.getTipo().equals("PAUSA"));
-                if (temPausa) throw new RuntimeException("Pausa já registrada.");
-                break;
-
-            case "RETORNO":
-                boolean temPausaAberta = hoje.stream().anyMatch(p -> p.getTipo().equals("PAUSA"));
-                if (!temPausaAberta) throw new RuntimeException("Não há pausa para retornar.");
-                break;
-
-            case "SAIDA":
-                boolean temSaida = hoje.stream().anyMatch(p -> p.getTipo().equals("SAIDA"));
-                if (temSaida) throw new RuntimeException("Saída já registrada hoje.");
-                break;
-        }
+        long pausas = hoje.stream().filter(p -> p.getTipo().equals("PAUSA")).count();
+        long retornos = hoje.stream().filter(p -> p.getTipo().equals("RETORNO")).count();
 
         RegistroPonto ponto = new RegistroPonto();
         ponto.setUsuarioId(usuarioId);
         ponto.setFuncionarioId(req.getFuncionarioId());
-        ponto.setTipo(req.getTipo());
         ponto.setDataHora(LocalDateTime.now());
+        ponto.setTipo(req.getTipo());
+
+        switch (req.getTipo()) {
+
+            case "ENTRADA" -> {
+                if (temEntrada)
+                    throw new RuntimeException("Entrada já registrada hoje.");
+                if (temSaida)
+                    throw new RuntimeException("Você já finalizou o expediente.");
+            }
+
+            case "PAUSA" -> {
+                if (!temEntrada)
+                    throw new RuntimeException("Registre a ENTRADA primeiro.");
+                if (temSaida)
+                    throw new RuntimeException("Já há saída registrada.");
+                if (pausas > retornos)
+                    throw new RuntimeException("Retorne da pausa atual primeiro.");
+            }
+
+            case "RETORNO" -> {
+                if (pausas == retornos)
+                    throw new RuntimeException("Nenhuma pausa em aberto.");
+                if (temSaida)
+                    throw new RuntimeException("Saída registrada — dia encerrado.");
+            }
+
+            case "SAIDA" -> {
+                if (!temEntrada)
+                    throw new RuntimeException("Registre a ENTRADA primeiro.");
+                if (temSaida)
+                    throw new RuntimeException("Saída já registrada hoje.");
+                if (pausas > retornos)
+                    throw new RuntimeException("Finalize a pausa antes da saída.");
+            }
+        }
 
         repository.save(ponto);
 
@@ -93,7 +111,9 @@ public class RegistroPontoService {
 
 
     public List<RegistroPontoResponse> listarHojeFuncionario(Long funcionarioId) {
+
         Long usuarioId = getUsuarioId();
+
         Funcionario f = funcionarioRepo.findById(funcionarioId)
                 .orElseThrow(() -> new RuntimeException("Funcionária não encontrada"));
 
@@ -102,12 +122,14 @@ public class RegistroPontoService {
 
         return repository.findByFuncionarioIdAndDataHoraBetween(
                 funcionarioId, inicioDoDia(), fimDoDia()
-        ).stream().map(p -> new RegistroPontoResponse(
-                p.getId(),
-                p.getFuncionarioId(),
-                p.getTipo(),
-                p.getDataHora()
-        )).toList();
+        ).stream().map(p ->
+                new RegistroPontoResponse(
+                        p.getId(),
+                        p.getFuncionarioId(),
+                        p.getTipo(),
+                        p.getDataHora()
+                )
+        ).toList();
     }
 
 
@@ -116,11 +138,13 @@ public class RegistroPontoService {
 
         return repository.findByUsuarioIdAndDataHoraBetween(
                 usuarioId, inicioDoDia(), fimDoDia()
-        ).stream().map(p -> new RegistroPontoResponse(
-                p.getId(),
-                p.getFuncionarioId(),
-                p.getTipo(),
-                p.getDataHora()
-        )).toList();
+        ).stream().map(p ->
+                new RegistroPontoResponse(
+                        p.getId(),
+                        p.getFuncionarioId(),
+                        p.getTipo(),
+                        p.getDataHora()
+                )
+        ).toList();
     }
 }
