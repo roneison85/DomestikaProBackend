@@ -18,4 +18,7 @@ public interface RegistroPontoRepository extends JpaRepository<RegistroPonto, Lo
             Long usuarioId,
             LocalDateTime inicio,
             LocalDateTime fim);
+    
+    List<RegistroPonto> findByDataHoraBetween(LocalDateTime inicio, LocalDateTime fim);
+
 }

@@ -1,7 +1,11 @@
 package com.startsoftbr.domestikapro.service;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -9,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import com.startsoftbr.domestikapro.dto.RegistroPontoRequest;
 import com.startsoftbr.domestikapro.dto.RegistroPontoResponse;
+import com.startsoftbr.domestikapro.dto.ResumoPontoResponse;
 import com.startsoftbr.domestikapro.entity.Funcionario;
 import com.startsoftbr.domestikapro.entity.RegistroPonto;
 import com.startsoftbr.domestikapro.entity.Usuario;
@@ -147,4 +152,101 @@ public class RegistroPontoService {
                 )
         ).toList();
     }
+    
+    public ResumoPontoResponse resumo(Long funcionarioId) {
+        Long usuarioId = getUsuarioId();
+
+        Funcionario f = funcionarioRepo.findById(funcionarioId)
+                .orElseThrow(() -> new RuntimeException("Funcionária não encontrada"));
+
+        if (!f.getUsuarioId().equals(usuarioId))
+            throw new RuntimeException("Acesso negado");
+
+        List<RegistroPonto> hoje = repository.findByFuncionarioIdAndDataHoraBetween(
+                funcionarioId, inicioDoDia(), fimDoDia()
+        );
+
+        hoje.sort(Comparator.comparing(RegistroPonto::getDataHora));
+
+        if (hoje.isEmpty())
+            throw new RuntimeException("Nenhum registro hoje.");
+
+        // Conversão para DTOs
+        List<RegistroPontoResponse> registrosDTO = hoje.stream()
+                .map(p -> new RegistroPontoResponse(
+                        p.getId(),
+                        p.getFuncionarioId(),
+                        p.getTipo(),
+                        p.getDataHora()))
+                .toList();
+
+        LocalDateTime entrada = null;
+        LocalDateTime saida = null;
+
+        List<LocalDateTime> pausas = new ArrayList<>();
+        List<LocalDateTime> retornos = new ArrayList<>();
+
+        for (RegistroPonto r : hoje) {
+            switch (r.getTipo()) {
+                case "ENTRADA" -> entrada = r.getDataHora();
+                case "SAIDA" -> saida = r.getDataHora();
+                case "PAUSA" -> pausas.add(r.getDataHora());
+                case "RETORNO" -> retornos.add(r.getDataHora());
+            }
+        }
+
+        // ---- Calcular total de pausa ----
+        long totalPausaSegundos = 0;
+        for (int i = 0; i < Math.min(pausas.size(), retornos.size()); i++) {
+            totalPausaSegundos += Duration.between(pausas.get(i), retornos.get(i)).getSeconds();
+        }
+
+        // ---- Calcular total trabalhado ----
+        long totalTrabalhadoSegundos = 0;
+
+        // períodos de trabalho
+        List<LocalDateTime> inicios = new ArrayList<>();
+        List<LocalDateTime> fins = new ArrayList<>();
+
+        if (entrada != null) inicios.add(entrada);
+
+        for (int i = 0; i < pausas.size(); i++) {
+            fins.add(pausas.get(i));
+            if (i < retornos.size()) inicios.add(retornos.get(i));
+        }
+
+        if (saida != null) fins.add(saida);
+
+        for (int i = 0; i < Math.min(inicios.size(), fins.size()); i++) {
+            totalTrabalhadoSegundos += Duration.between(inicios.get(i), fins.get(i)).getSeconds();
+        }
+
+        // ---- formatar HH:mm ----
+        String totalPausa = formatar(totalPausaSegundos);
+        String totalTrabalhado = formatar(totalTrabalhadoSegundos);
+
+        String primeiraEntrada = entrada != null ? formatarHora(entrada) : "--:--";
+        String ultimaSaida = saida != null ? formatarHora(saida) : "--:--";
+
+        return new ResumoPontoResponse(
+                funcionarioId,
+                f.getNome(),
+                primeiraEntrada,
+                ultimaSaida,
+                totalTrabalhado,
+                totalPausa,
+                registrosDTO
+        );
+    }
+
+    private String formatar(long segundos) {
+        long horas = segundos / 3600;
+        long minutos = (segundos % 3600) / 60;
+        return String.format("%02d:%02d", horas, minutos);
+    }
+
+    private String formatarHora(LocalDateTime dt) {
+        return dt.toLocalTime().format(DateTimeFormatter.ofPattern("HH:mm"));
+    }
+
 }
