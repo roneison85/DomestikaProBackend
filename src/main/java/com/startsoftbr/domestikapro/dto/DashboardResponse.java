@@ -21,6 +21,7 @@ public class DashboardResponse {
     private String totalPausa;
 
     private List<RankingItem> ranking;
+    private List<AlertaPonto> alertas;
 
     @Data
     @AllArgsConstructor

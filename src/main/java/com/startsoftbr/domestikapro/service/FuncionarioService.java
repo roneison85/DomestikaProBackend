@@ -10,7 +10,6 @@ import com.startsoftbr.domestikapro.dto.FuncionarioResponse;
 import com.startsoftbr.domestikapro.entity.Funcionario;
 import com.startsoftbr.domestikapro.entity.Usuario;
 import com.startsoftbr.domestikapro.repository.FuncionarioRepository;
-import com.startsoftbr.domestikapro.repository.UsuarioRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -19,7 +18,6 @@ import lombok.RequiredArgsConstructor;
 public class FuncionarioService {
 
     private final FuncionarioRepository funcionarioRepository;
-    private final UsuarioRepository usuarioRepository;
 
     private Long getUsuarioLogadoId() {
         Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
